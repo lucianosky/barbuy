@@ -22,19 +22,21 @@ def geocode_city(city_name: str):
 
 
 def format_time(dt) -> str:
-    return dt.strftime("%H:%M:%S")
+    decisecond = dt.microsecond // 100000
+    return dt.strftime("%H:%M:%S") + f".{decisecond}"
 
 
 def format_duration(delta) -> str:
-    total = int(delta.total_seconds())
-    h = total // 3600
-    m = (total % 3600) // 60
-    s = total % 60
-    return f"{h:02d}:{m:02d}:{s:02d}"
+    total = delta.total_seconds()
+    h = int(total) // 3600
+    m = (int(total) % 3600) // 60
+    s = int(total) % 60
+    d = int((total - int(total)) * 10)
+    return f"{h:02d}:{m:02d}:{s:02d}.{d}"
 
 
-def delta_seconds(td) -> int:
-    return int(td.total_seconds())
+def delta_seconds(td) -> float:
+    return round(td.total_seconds(), 1)
 
 
 def time_to_td(t):
@@ -167,9 +169,9 @@ if city_info:
 
             flags.append({
                 "is_selected":     r["date"] == selected_date,
-                "is_max_sunrise":  delta_seconds(delta_sunrise) == 0,
-                "is_min_sunset":   delta_seconds(delta_sunset) == 0,
-                "is_min_duration": delta_seconds(delta_duration) == 0,
+                "is_max_sunrise":  delta_seconds(delta_sunrise) < 0.5,
+                "is_min_sunset":   delta_seconds(delta_sunset) < 0.5,
+                "is_min_duration": delta_seconds(delta_duration) < 0.5,
             })
 
             table.append({
