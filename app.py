@@ -156,6 +156,7 @@ if city_info:
         min_duration = min(r["duration"] for r in rows)
 
         table = []
+        flags = []
         for r in rows:
             sunrise_time = r["sunrise_dt"].replace(tzinfo=None).time()
             sunset_time  = r["sunset_dt"].replace(tzinfo=None).time()
@@ -164,16 +165,18 @@ if city_info:
             delta_sunset   = time_to_td(sunset_time)  - time_to_td(min_sunset)
             delta_duration = r["duration"] - min_duration
 
-            is_selected       = r["date"] == selected_date
-            is_max_sunrise    = sunrise_time == max_sunrise
-            is_min_sunset     = sunset_time == min_sunset
-            is_min_duration   = r["duration"] == min_duration
+            flags.append({
+                "is_selected":    r["date"] == selected_date,
+                "is_max_sunrise": sunrise_time == max_sunrise,
+                "is_min_sunset":  sunset_time == min_sunset,
+                "is_min_duration": r["duration"] == min_duration,
+            })
 
             table.append({
-                "Data":               r["date"].strftime("%Y-%m-%d") + (" ◀" if is_selected else ""),
-                "Nascer do sol":      format_time(r["sunrise_dt"]) + (" ◀" if is_max_sunrise else ""),
-                "Pôr do sol":         format_time(r["sunset_dt"])  + (" ◀" if is_min_sunset else ""),
-                "Duração":            format_duration(r["duration"]) + (" ◀" if is_min_duration else ""),
+                "Data":               r["date"].strftime("%Y-%m-%d"),
+                "Nascer do sol":      format_time(r["sunrise_dt"]),
+                "Pôr do sol":         format_time(r["sunset_dt"]),
+                "Duração":            format_duration(r["duration"]),
                 "Δs nascer (tardio)": delta_seconds(delta_sunrise),
                 "Δs pôr (cedo)":      delta_seconds(delta_sunset),
                 "Δs duração (curto)": delta_seconds(delta_duration),
@@ -181,17 +184,26 @@ if city_info:
 
         df = pd.DataFrame(table)
 
+        CELL = "background-color: {}; color: #111111"
+        C_DATE    = CELL.format("#bfdbfe")  # azul pastel
+        C_SUNRISE = CELL.format("#fef08a")  # amarelo pastel
+        C_SUNSET  = CELL.format("#fed7aa")  # laranja pastel
+        C_DUR     = CELL.format("#f9a8d4")  # rosa pastel
+
         def highlight(df):
             styles = pd.DataFrame("", index=df.index, columns=df.columns)
-            for i, row in df.iterrows():
-                if "◀" in str(row["Data"]):
-                    styles.at[i, "Data"] = "background-color: #dbeafe"
-                if "◀" in str(row["Nascer do sol"]):
-                    styles.at[i, "Nascer do sol"] = "background-color: #fef9c3"
-                if "◀" in str(row["Pôr do sol"]):
-                    styles.at[i, "Pôr do sol"] = "background-color: #ffedd5"
-                if "◀" in str(row["Duração"]):
-                    styles.at[i, "Duração"] = "background-color: #fce7f3"
+            for i, f in enumerate(flags):
+                if f["is_selected"]:
+                    styles.at[i, "Data"] = C_DATE
+                if f["is_max_sunrise"]:
+                    styles.at[i, "Nascer do sol"]      = C_SUNRISE
+                    styles.at[i, "Δs nascer (tardio)"] = C_SUNRISE
+                if f["is_min_sunset"]:
+                    styles.at[i, "Pôr do sol"]   = C_SUNSET
+                    styles.at[i, "Δs pôr (cedo)"] = C_SUNSET
+                if f["is_min_duration"]:
+                    styles.at[i, "Duração"]            = C_DUR
+                    styles.at[i, "Δs duração (curto)"] = C_DUR
             return styles
 
         styled = df.style.apply(highlight, axis=None)
