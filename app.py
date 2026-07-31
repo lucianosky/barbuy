@@ -23,6 +23,28 @@ def geocode_city(city_name: str):
         return None
 
 
+@st.cache_data(show_spinner=False)
+def calculate_solar_rows(lat: float, lon: float, tz_name: str, date_start, date_end) -> list:
+    city = LocationInfo(name="", region="", timezone=tz_name, latitude=lat, longitude=lon)
+    rows = []
+    current = date_start
+    while current <= date_end:
+        try:
+            s = sun(city.observer, date=current, tzinfo=city.timezone)
+            sunrise_dt = s["sunrise"]
+            sunset_dt  = s["sunset"]
+            rows.append({
+                "date":       current,
+                "sunrise_dt": sunrise_dt,
+                "sunset_dt":  sunset_dt,
+                "duration":   sunset_dt - sunrise_dt,
+            })
+        except Exception:
+            pass
+        current += timedelta(days=1)
+    return rows
+
+
 def format_time(dt) -> str:
     ms = dt.microsecond // 1000
     return dt.strftime("%H:%M:%S") + f".{ms:03d}"
@@ -45,62 +67,38 @@ def time_to_td(t):
     return timedelta(hours=t.hour, minutes=t.minute, seconds=t.second, microseconds=t.microsecond)
 
 
-def nearest_solstices(ref_date: date, hemisphere: str) -> list[tuple[str, date]]:
-    """Retorna os 2 solstícios anteriores e 2 posteriores à ref_date.
-    Hemisfério sul: inverno = junho, verão = dezembro.
-    Hemisfério norte: inverno = dezembro, verão = junho.
-    """
-    # datas aproximadas dos solstícios (dia 21 de junho e dezembro)
-    candidates = []
-    for year in range(ref_date.year - 2, ref_date.year + 3):
-        if hemisphere == "sul":
-            candidates.append(("Inverno", date(year, 6, 21)))
-            candidates.append(("Verão",   date(year, 12, 21)))
-        else:
-            candidates.append(("Verão",   date(year, 6, 21)))
-            candidates.append(("Inverno", date(year, 12, 21)))
-
-    candidates.sort(key=lambda x: x[1])
-
-    before = [(label, d) for label, d in candidates if d < ref_date]
-    after  = [(label, d) for label, d in candidates if d >= ref_date]
-
-    return before[-2:] + after[:2]
+def solar_events(year: int, hemisphere: str) -> list:
+    """4 eventos astronômicos do ano em ordem calendário, com labels corretos por hemisfério."""
+    raw = [
+        (date(year, 3, 20),  "Equinócio de Outono"    if hemisphere == "sul" else "Equinócio de Primavera"),
+        (date(year, 6, 21),  "Solstício de Inverno"   if hemisphere == "sul" else "Solstício de Verão"),
+        (date(year, 9, 22),  "Equinócio de Primavera" if hemisphere == "sul" else "Equinócio de Outono"),
+        (date(year, 12, 21), "Solstício de Verão"     if hemisphere == "sul" else "Solstício de Inverno"),
+    ]
+    return [(label, d) for d, label in raw]
 
 
-@st.cache_data(show_spinner=False)
-def calculate_solar_rows(lat: float, lon: float, tz_name: str, date_start, date_end) -> list:
-    from astral import LocationInfo
-    city = LocationInfo(name="", region="", timezone=tz_name, latitude=lat, longitude=lon)
-    rows = []
-    current = date_start
-    while current <= date_end:
-        try:
-            s = sun(city.observer, date=current, tzinfo=city.timezone)
-            sunrise_dt = s["sunrise"]
-            sunset_dt  = s["sunset"]
-            duration   = sunset_dt - sunrise_dt
-            rows.append({
-                "date":       current,
-                "sunrise_dt": sunrise_dt,
-                "sunset_dt":  sunset_dt,
-                "duration":   duration,
-                "d_nascer":   None,
-                "d_por":      None,
-                "d_duracao":  None,
-            })
-        except Exception:
-            pass
-        current += timedelta(days=1)
-    return rows
+EVENT_COLORS = {
+    "Solstício de Inverno":    "#fef08a",
+    "Solstício de Verão":      "#fca5a5",
+    "Equinócio de Primavera":  "#86efac",
+    "Equinócio de Outono":     "#fdba74",
+}
+
+CELL = "background-color: {}; color: #111111"
+C_DATE    = CELL.format("#bfdbfe")
+C_SUNRISE = CELL.format("#fef08a")
+C_SUNSET  = CELL.format("#fed7aa")
+C_DUR     = CELL.format("#f9a8d4")
 
 
-# --- Input: cidade ---
+# ─── Input: cidade ────────────────────────────────────────────────────────────
+
 city_input = st.text_input("Cidade", placeholder="Ex: Porto Alegre, Buenos Aires, Lisboa...")
 
 location = None
 city_info = None
-tz_name = "UTC"
+tz_name   = "UTC"
 
 if city_input:
     with st.spinner("Buscando localização..."):
@@ -109,19 +107,17 @@ if city_input:
     if location:
         st.success(f"**{location.address}**")
         col_lat, col_lon = st.columns(2)
-        col_lat.metric("Latitude", f"{location.latitude:.6f}°")
+        col_lat.metric("Latitude",  f"{location.latitude:.6f}°")
         col_lon.metric("Longitude", f"{location.longitude:.6f}°")
 
         try:
             from timezonefinder import TimezoneFinder
-            tf = TimezoneFinder()
-            tz_name = tf.timezone_at(lat=location.latitude, lng=location.longitude) or "UTC"
+            tz_name = TimezoneFinder().timezone_at(lat=location.latitude, lng=location.longitude) or "UTC"
         except ImportError:
             tz_name = "UTC"
 
         city_info = LocationInfo(
-            name=city_input,
-            region="",
+            name=city_input, region="",
             timezone=tz_name,
             latitude=location.latitude,
             longitude=location.longitude,
@@ -129,50 +125,101 @@ if city_input:
     else:
         st.error("Cidade não encontrada. Tente um nome diferente.")
 
-# --- Input: data e período ---
+
 if city_info:
     st.divider()
 
     hemisphere = "sul" if location.latitude < 0 else "norte"
-    solstices = nearest_solstices(date.today(), hemisphere)
+    year       = date.today().year
+    events     = solar_events(year, hemisphere)
 
-    solstice_labels = [f"Solstício de {label} — {d.strftime('%d/%m/%Y')}" for label, d in solstices]
-    solstice_dates  = [d for _, d in solstices]
+    col_window, _ = st.columns([1, 3])
+    with col_window:
+        window = st.selectbox("Janela ao redor de cada evento (dias)", [10, 20, 30], index=1)
 
-    col_date, col_period, col_solstice = st.columns([1, 1, 2])
+    # ─── Gráfico anual ────────────────────────────────────────────────────────
 
-    with col_date:
-        selected_date = st.date_input("Data", value=date.today())
-
-    with col_period:
-        period_days = st.selectbox("Período (dias antes e depois)", [10, 30, 60, 90, 120, 180, 360], index=1)
-
-    with col_solstice:
-        solstice_choice = st.selectbox("Ir para solstício", ["—"] + solstice_labels)
-        if solstice_choice != "—":
-            idx = solstice_labels.index(solstice_choice)
-            selected_date = solstice_dates[idx]
-            st.caption(f"Data ajustada para {selected_date.strftime('%d/%m/%Y')}")
-
-    # --- Cálculo ---
     st.divider()
+    st.subheader(f"Duração do dia — {city_input} · {year}")
 
-    date_start  = selected_date - timedelta(days=period_days)
-    date_end    = selected_date + timedelta(days=period_days)
-    total_days  = period_days * 2 + 1
-
-    with st.spinner(f"Calculando {total_days} dias..."):
-        rows = calculate_solar_rows(
-            location.latitude, location.longitude, tz_name, date_start, date_end
+    with st.spinner("Calculando ano completo..."):
+        year_rows = calculate_solar_rows(
+            location.latitude, location.longitude, tz_name,
+            date(year, 1, 1), date(year, 12, 31),
         )
 
-    if rows:
+    year_dates    = [r["date"]     for r in year_rows]
+    year_duration = [r["duration"].total_seconds() / 3600 for r in year_rows]
+
+    fig_year = go.Figure()
+    fig_year.add_trace(go.Scatter(
+        x=year_dates, y=year_duration,
+        name="Duração do dia",
+        line=dict(color="#60a5fa", width=2.5),
+        hovertemplate="%{x}<br>%{y:.4f}h<extra>Duração</extra>",
+    ))
+
+    annotation_positions = ["top left", "top right", "top left", "top right"]
+    for (label, d), ann_pos in zip(events, annotation_positions):
+        color     = EVENT_COLORS.get(label, "#ffffff")
+        event_row = next((r for r in year_rows if r["date"] == d), None)
+        y_val     = event_row["duration"].total_seconds() / 3600 if event_row else None
+
+        fig_year.add_vline(
+            x=str(d),
+            line=dict(color=color, width=1.5, dash="dot"),
+            annotation_text=f"{label}<br>{d.strftime('%d/%m')}",
+            annotation_position=ann_pos,
+            annotation_font=dict(color=color, size=10),
+        )
+        if y_val is not None:
+            fig_year.add_trace(go.Scatter(
+                x=[d], y=[y_val],
+                mode="markers",
+                marker=dict(color=color, size=9, symbol="circle"),
+                name=label,
+                hovertemplate=f"{label}<br>{d.strftime('%d/%m/%Y')}<br>{y_val:.4f}h<extra></extra>",
+            ))
+
+    fig_year.update_layout(
+        xaxis_title="Data",
+        yaxis_title="Duração (horas)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        hovermode="x unified",
+        margin=dict(t=90, b=40),
+        height=400,
+    )
+    st.plotly_chart(fig_year, use_container_width=True)
+
+    # ─── 4 seções de evento ───────────────────────────────────────────────────
+
+    for label, event_date in events:
+        color   = EVENT_COLORS.get(label, "#ffffff")
+        d_start = event_date - timedelta(days=window)
+        d_end   = event_date + timedelta(days=window)
+
+        st.divider()
+        st.subheader(f"{label} — {event_date.strftime('%d/%m/%Y')}")
+        st.caption(f"{d_start.strftime('%d/%m')} a {d_end.strftime('%d/%m/%Y')} · {window*2+1} dias · {tz_name}")
+
+        with st.spinner(f"Calculando {window*2+1} dias..."):
+            rows = calculate_solar_rows(
+                location.latitude, location.longitude, tz_name, d_start, d_end
+            )
+
+        if not rows:
+            continue
+
         max_sunrise  = max(r["sunrise_dt"].replace(tzinfo=None).time() for r in rows)
         min_sunset   = min(r["sunset_dt"].replace(tzinfo=None).time() for r in rows)
         min_duration = min(r["duration"] for r in rows)
 
-        table = []
-        flags = []
+        table          = []
+        flags          = []
+        d_nascer_list  = []
+        d_por_list     = []
+        d_duracao_list = []
+
         for r in rows:
             sunrise_time = r["sunrise_dt"].replace(tzinfo=None).time()
             sunset_time  = r["sunset_dt"].replace(tzinfo=None).time()
@@ -181,14 +228,14 @@ if city_info:
             delta_sunset   = time_to_td(sunset_time)  - time_to_td(min_sunset)
             delta_duration = r["duration"] - min_duration
 
-            r["d_nascer"]  = delta_sunrise.total_seconds()
-            r["d_por"]     = delta_sunset.total_seconds()
-            r["d_duracao"] = delta_duration.total_seconds()
+            d_nascer_list.append(delta_sunrise.total_seconds())
+            d_por_list.append(delta_sunset.total_seconds())
+            d_duracao_list.append(delta_duration.total_seconds())
 
             flags.append({
-                "is_selected":     r["date"] == selected_date,
-                "is_max_sunrise":  delta_sunrise.total_seconds() < 0.005,
-                "is_min_sunset":   delta_sunset.total_seconds() < 0.005,
+                "is_selected":     r["date"] == event_date,
+                "is_max_sunrise":  delta_sunrise.total_seconds()  < 0.005,
+                "is_min_sunset":   delta_sunset.total_seconds()   < 0.005,
                 "is_min_duration": delta_duration.total_seconds() < 0.005,
             })
 
@@ -204,15 +251,11 @@ if city_info:
 
         df = pd.DataFrame(table)
 
-        CELL = "background-color: {}; color: #111111"
-        C_DATE    = CELL.format("#bfdbfe")  # azul pastel
-        C_SUNRISE = CELL.format("#fef08a")  # amarelo pastel
-        C_SUNSET  = CELL.format("#fed7aa")  # laranja pastel
-        C_DUR     = CELL.format("#f9a8d4")  # rosa pastel
+        captured_flags = flags  # capture for closure
 
-        def highlight(df):
+        def highlight(df, _flags=captured_flags):
             styles = pd.DataFrame("", index=df.index, columns=df.columns)
-            for i, f in enumerate(flags):
+            for i, f in enumerate(_flags):
                 if f["is_selected"]:
                     styles.at[i, "Data"] = C_DATE
                 if f["is_max_sunrise"]:
@@ -226,97 +269,51 @@ if city_info:
                     styles.at[i, "Δ duração curto (s)"] = C_DUR
             return styles
 
-        styled = df.style.apply(highlight, axis=None)
         table_height = len(df) * 35 + 38
 
-        st.subheader(f"Resultados — {city_input} ({tz_name})")
-        st.caption(
-            f"Período: {date_start.strftime('%d/%m/%Y')} a {date_end.strftime('%d/%m/%Y')} · "
-            f"{total_days} dias · "
-            f"Nascer mais tardio: {max_sunrise.strftime('%H:%M:%S')} · "
-            f"Pôr mais cedo: {min_sunset.strftime('%H:%M:%S')} · "
-            f"Dia mais curto: {format_duration(min_duration)}"
-        )
+        col_table, col_chart = st.columns([3, 2])
 
-        st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
+        with col_table:
+            styled = df.style.apply(highlight, axis=None)
+            st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
 
-        st.caption("Δ (s) = diferença em segundos (precisão de milissegundo) em relação ao extremo do período. Horários no fuso da cidade selecionada.")
+        with col_chart:
+            event_dates_list = [r["date"] for r in rows]
 
-        # --- Gráfico ---
-        st.divider()
-        st.subheader("Curvas dos deltas")
-
-        dates      = [r["date"] for r in rows]
-        d_nascer   = [r["d_nascer"]   for r in rows]
-        d_por      = [r["d_por"]      for r in rows]
-        d_duracao  = [r["d_duracao"]  for r in rows]
-
-        idx_nascer  = d_nascer.index(min(d_nascer))
-        idx_por     = d_por.index(min(d_por))
-        idx_duracao = d_duracao.index(min(d_duracao))
-
-        fig = go.Figure()
-
-        # curvas
-        fig.add_trace(go.Scatter(
-            x=dates, y=d_nascer, name="Δ nascer tardio",
-            line=dict(color="#ca8a04", width=2),
-            hovertemplate="%{x}<br>%{y:.3f}s<extra>Δ nascer</extra>",
-        ))
-        fig.add_trace(go.Scatter(
-            x=dates, y=d_por, name="Δ pôr cedo",
-            line=dict(color="#c2410c", width=2),
-            hovertemplate="%{x}<br>%{y:.3f}s<extra>Δ pôr</extra>",
-        ))
-        fig.add_trace(go.Scatter(
-            x=dates, y=d_duracao, name="Δ duração curto",
-            line=dict(color="#be185d", width=2),
-            hovertemplate="%{x}<br>%{y:.3f}s<extra>Δ duração</extra>",
-        ))
-
-        # pontos de mínimo
-        for idx, d_list, color, label in [
-            (idx_nascer,  d_nascer,  "#ca8a04", "nascer tardio"),
-            (idx_por,     d_por,     "#c2410c", "pôr cedo"),
-            (idx_duracao, d_duracao, "#be185d", "duração curta"),
-        ]:
+            fig = go.Figure()
             fig.add_trace(go.Scatter(
-                x=[dates[idx]], y=[d_list[idx]],
-                mode="markers",
-                marker=dict(color=color, size=10, symbol="circle"),
-                name=f"mín {label}",
-                hovertemplate=f"{dates[idx]}<br>{d_list[idx]:.3f}s<extra>mín {label}</extra>",
-                showlegend=False,
+                x=event_dates_list, y=d_nascer_list, name="Δ nascer tardio",
+                line=dict(color="#ca8a04", width=2),
+                hovertemplate="%{x}<br>%{y:.3f}s<extra>Δ nascer</extra>",
             ))
+            fig.add_trace(go.Scatter(
+                x=event_dates_list, y=d_por_list, name="Δ pôr cedo",
+                line=dict(color="#c2410c", width=2),
+                hovertemplate="%{x}<br>%{y:.3f}s<extra>Δ pôr</extra>",
+            ))
+            fig.add_trace(go.Scatter(
+                x=event_dates_list, y=d_duracao_list, name="Δ duração curto",
+                line=dict(color="#be185d", width=2),
+                hovertemplate="%{x}<br>%{y:.3f}s<extra>Δ duração</extra>",
+            ))
+
             fig.add_vline(
-                x=str(dates[idx]),
-                line=dict(color=color, width=1, dash="dot"),
-                annotation_text=dates[idx].strftime("%d/%m"),
+                x=str(event_date),
+                line=dict(color=color, width=1.5, dash="dash"),
+                annotation_text=event_date.strftime("%d/%m"),
                 annotation_position="top",
-                annotation_font=dict(color=color, size=11),
+                annotation_font=dict(color=color, size=10),
             )
 
-        # data selecionada — só desenha se não coincidir com nenhum mínimo
-        minima_dates = {dates[idx_nascer], dates[idx_por], dates[idx_duracao]}
-        if selected_date not in minima_dates:
-            fig.add_vline(
-                x=str(selected_date),
-                line=dict(color="#93c5fd", width=1.5, dash="dash"),
-                annotation_text=selected_date.strftime("%d/%m"),
-                annotation_position="top right",
-                annotation_font=dict(color="#93c5fd", size=11),
+            fig.update_layout(
+                xaxis_title="Data",
+                yaxis_title="Δ (segundos)",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+                hovermode="x unified",
+                margin=dict(t=60, b=40),
+                height=table_height,
             )
-
-        fig.update_layout(
-            xaxis_title="Data",
-            yaxis_title="Δ (segundos)",
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-            hovermode="x unified",
-            margin=dict(t=60, b=40),
-            height=420,
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
 st.caption("Barbuy · homenagem à astrônoma brasileira Beatriz Barbuy (IAG/USP) · cálculos via [astral](https://sffjunkie.github.io/astral/)")
