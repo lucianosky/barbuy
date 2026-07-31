@@ -40,7 +40,7 @@ def format_delta(td) -> str:
 
 
 def time_to_td(t):
-    return timedelta(hours=t.hour, minutes=t.minute, seconds=t.second)
+    return timedelta(hours=t.hour, minutes=t.minute, seconds=t.second, microseconds=t.microsecond)
 
 
 def nearest_solstices(ref_date: date, hemisphere: str) -> list[tuple[str, date]]:
