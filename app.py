@@ -181,6 +181,22 @@ if city_info:
 
         df = pd.DataFrame(table)
 
+        def highlight(df):
+            styles = pd.DataFrame("", index=df.index, columns=df.columns)
+            for i, row in df.iterrows():
+                if "◀" in str(row["Data"]):
+                    styles.at[i, "Data"] = "background-color: #dbeafe"
+                if "◀" in str(row["Nascer do sol"]):
+                    styles.at[i, "Nascer do sol"] = "background-color: #fef9c3"
+                if "◀" in str(row["Pôr do sol"]):
+                    styles.at[i, "Pôr do sol"] = "background-color: #ffedd5"
+                if "◀" in str(row["Duração"]):
+                    styles.at[i, "Duração"] = "background-color: #fce7f3"
+            return styles
+
+        styled = df.style.apply(highlight, axis=None)
+        table_height = len(df) * 35 + 38
+
         st.subheader(f"Resultados — {city_input} ({tz_name})")
         st.caption(
             f"Período: {date_start.strftime('%d/%m/%Y')} a {date_end.strftime('%d/%m/%Y')} · "
@@ -190,7 +206,7 @@ if city_info:
             f"Dia mais curto: {format_duration(min_duration)}"
         )
 
-        st.table(df)
+        st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
 
         st.caption("Δs = diferença em segundos em relação ao extremo do período. Horários no fuso da cidade selecionada.")
 
