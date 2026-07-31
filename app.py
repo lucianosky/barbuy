@@ -117,7 +117,7 @@ if city_info:
         selected_date = st.date_input("Data", value=date.today())
 
     with col_period:
-        period_days = st.selectbox("Período (dias antes e depois)", [10, 30, 60], index=1)
+        period_days = st.selectbox("Período (dias antes e depois)", [10, 30, 60, 90, 120], index=1)
 
     with col_solstice:
         solstice_choice = st.selectbox("Ir para solstício", ["—"] + solstice_labels)
