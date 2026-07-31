@@ -86,10 +86,12 @@ EVENT_COLORS = {
 }
 
 CELL = "background-color: {}; color: #111111"
-C_DATE    = CELL.format("#bfdbfe")
-C_SUNRISE = CELL.format("#fef08a")
-C_SUNSET  = CELL.format("#fed7aa")
-C_DUR     = CELL.format("#f9a8d4")
+C_DATE     = CELL.format("#bfdbfe")
+C_SUNRISE  = CELL.format("#fef08a")
+C_SUNSET   = CELL.format("#fed7aa")
+C_DUR      = CELL.format("#f9a8d4")
+C_ABOVE12H = CELL.format("#bbf7d0")  # verde pastel — duração imediatamente acima de 12h
+C_BELOW12H = CELL.format("#ddd6fe")  # lavanda pastel — duração imediatamente abaixo de 12h
 
 
 # ─── Input: cidade ────────────────────────────────────────────────────────────
@@ -239,9 +241,28 @@ if city_info:
         if not rows:
             continue
 
+        is_equinox = "Equinócio" in label
+
         max_sunrise  = max(r["sunrise_dt"].replace(tzinfo=None).time() for r in rows)
         min_sunset   = min(r["sunset_dt"].replace(tzinfo=None).time() for r in rows)
         min_duration = min(r["duration"] for r in rows)
+
+        # Para equinócios: encontrar os dois dias que cruzam 12h de duração
+        TWELVE_HOURS  = timedelta(hours=12)
+        above_12h_date = below_12h_date = None
+        if is_equinox:
+            min_above = min_below = None
+            for r in rows:
+                diff = r["duration"] - TWELVE_HOURS
+                if diff >= timedelta(0):
+                    if min_above is None or diff < min_above:
+                        min_above = diff
+                        above_12h_date = r["date"]
+                else:
+                    neg = TWELVE_HOURS - r["duration"]
+                    if min_below is None or neg < min_below:
+                        min_below = neg
+                        below_12h_date = r["date"]
 
         table          = []
         flags          = []
@@ -263,9 +284,11 @@ if city_info:
 
             flags.append({
                 "is_selected":     r["date"] == event_date,
-                "is_max_sunrise":  delta_sunrise.total_seconds()  < 0.005,
-                "is_min_sunset":   delta_sunset.total_seconds()   < 0.005,
-                "is_min_duration": delta_duration.total_seconds() < 0.005,
+                "is_max_sunrise":  not is_equinox and delta_sunrise.total_seconds()  < 0.005,
+                "is_min_sunset":   not is_equinox and delta_sunset.total_seconds()   < 0.005,
+                "is_min_duration": not is_equinox and delta_duration.total_seconds() < 0.005,
+                "is_above_12h":    is_equinox and r["date"] == above_12h_date,
+                "is_below_12h":    is_equinox and r["date"] == below_12h_date,
             })
 
             table.append({
@@ -296,6 +319,10 @@ if city_info:
                 if f["is_min_duration"]:
                     styles.at[i, "Duração"]             = C_DUR
                     styles.at[i, "Δ duração curto (s)"] = C_DUR
+                if f["is_above_12h"]:
+                    styles.at[i, "Duração"] = C_ABOVE12H
+                if f["is_below_12h"]:
+                    styles.at[i, "Duração"] = C_BELOW12H
             return styles
 
         table_height = len(df) * 35 + 38
