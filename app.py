@@ -13,6 +13,7 @@ st.title("☀️ Barbuy — Calculadora Solar")
 st.caption("Precisão de segundos para nascer do sol, pôr do sol e duração do dia.")
 
 
+@st.cache_data(show_spinner=False)
 def geocode_city(city_name: str):
     geolocator = Nominatim(user_agent="barbuy-solar-calculator")
     try:
@@ -67,6 +68,33 @@ def nearest_solstices(ref_date: date, hemisphere: str) -> list[tuple[str, date]]
     return before[-2:] + after[:2]
 
 
+@st.cache_data(show_spinner=False)
+def calculate_solar_rows(lat: float, lon: float, tz_name: str, date_start, date_end) -> list:
+    from astral import LocationInfo
+    city = LocationInfo(name="", region="", timezone=tz_name, latitude=lat, longitude=lon)
+    rows = []
+    current = date_start
+    while current <= date_end:
+        try:
+            s = sun(city.observer, date=current, tzinfo=city.timezone)
+            sunrise_dt = s["sunrise"]
+            sunset_dt  = s["sunset"]
+            duration   = sunset_dt - sunrise_dt
+            rows.append({
+                "date":       current,
+                "sunrise_dt": sunrise_dt,
+                "sunset_dt":  sunset_dt,
+                "duration":   duration,
+                "d_nascer":   None,
+                "d_por":      None,
+                "d_duracao":  None,
+            })
+        except Exception:
+            pass
+        current += timedelta(days=1)
+    return rows
+
+
 # --- Input: cidade ---
 city_input = st.text_input("Cidade", placeholder="Ex: Porto Alegre, Buenos Aires, Lisboa...")
 
@@ -117,7 +145,7 @@ if city_info:
         selected_date = st.date_input("Data", value=date.today())
 
     with col_period:
-        period_days = st.selectbox("Período (dias antes e depois)", [10, 30, 60, 90, 120], index=1)
+        period_days = st.selectbox("Período (dias antes e depois)", [10, 30, 60, 90, 120, 180, 360], index=1)
 
     with col_solstice:
         solstice_choice = st.selectbox("Ir para solstício", ["—"] + solstice_labels)
@@ -133,28 +161,10 @@ if city_info:
     date_end    = selected_date + timedelta(days=period_days)
     total_days  = period_days * 2 + 1
 
-    rows = []
-    current = date_start
-
     with st.spinner(f"Calculando {total_days} dias..."):
-        while current <= date_end:
-            try:
-                s = sun(city_info.observer, date=current, tzinfo=city_info.timezone)
-                sunrise_dt = s["sunrise"]
-                sunset_dt  = s["sunset"]
-                duration   = sunset_dt - sunrise_dt
-                rows.append({
-                    "date":       current,
-                    "sunrise_dt": sunrise_dt,
-                    "sunset_dt":  sunset_dt,
-                    "duration":   duration,
-                    "d_nascer":   None,
-                    "d_por":      None,
-                    "d_duracao":  None,
-                })
-            except Exception:
-                pass
-            current += timedelta(days=1)
+        rows = calculate_solar_rows(
+            location.latitude, location.longitude, tz_name, date_start, date_end
+        )
 
     if rows:
         max_sunrise  = max(r["sunrise_dt"].replace(tzinfo=None).time() for r in rows)
