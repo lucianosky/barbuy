@@ -222,6 +222,92 @@ if city_info:
     )
     st.plotly_chart(fig_year, use_container_width=True)
 
+    # ─── Mini gráficos dos equinócios ────────────────────────────────────────
+
+    equinoxes = [(lbl, d) for lbl, d in events if "Equinócio" in lbl]
+    eq_cols   = st.columns(2)
+
+    for col, (eq_label, eq_date) in zip(eq_cols, equinoxes):
+        eq_color  = EVENT_COLORS.get(eq_label, "#ffffff")
+        eq_start  = eq_date - timedelta(days=15)
+        eq_end    = eq_date + timedelta(days=15)
+
+        with st.spinner(f"Calculando {eq_label}..."):
+            eq_rows = calculate_solar_rows(
+                location.latitude, location.longitude, tz_name, eq_start, eq_end
+            )
+
+        if not eq_rows:
+            continue
+
+        eq_dates    = [r["date"] for r in eq_rows]
+        eq_max_sr   = max(r["sunrise_dt"].replace(tzinfo=None).time() for r in eq_rows)
+        eq_min_ss   = min(r["sunset_dt"].replace(tzinfo=None).time() for r in eq_rows)
+        eq_min_dur  = min(r["duration"] for r in eq_rows)
+
+        eq_d_nascer  = []
+        eq_d_por     = []
+        eq_d_duracao = []
+        for r in eq_rows:
+            st_ = r["sunrise_dt"].replace(tzinfo=None).time()
+            ss_ = r["sunset_dt"].replace(tzinfo=None).time()
+            eq_d_nascer.append((time_to_td(eq_max_sr) - time_to_td(st_)).total_seconds())
+            eq_d_por.append((time_to_td(ss_) - time_to_td(eq_min_ss)).total_seconds())
+            eq_d_duracao.append((r["duration"] - eq_min_dur).total_seconds())
+
+        fig_eq = go.Figure()
+        fig_eq.add_trace(go.Scatter(
+            x=eq_dates, y=eq_d_nascer, name="Δ nascer tardio",
+            line=dict(color="#ca8a04", width=2),
+            hovertemplate="%{x}<br>%{y:.3f}s<extra>Δ nascer</extra>",
+        ))
+        fig_eq.add_trace(go.Scatter(
+            x=eq_dates, y=eq_d_por, name="Δ pôr cedo",
+            line=dict(color="#c2410c", width=2),
+            hovertemplate="%{x}<br>%{y:.3f}s<extra>Δ pôr</extra>",
+        ))
+        fig_eq.add_trace(go.Scatter(
+            x=eq_dates, y=eq_d_duracao, name="Δ duração curto",
+            line=dict(color="#be185d", width=2),
+            hovertemplate="%{x}<br>%{y:.3f}s<extra>Δ duração</extra>",
+        ))
+
+        for d_list, c, lbl in [
+            (eq_d_nascer,  "#ca8a04", "nascer tardio"),
+            (eq_d_por,     "#c2410c", "pôr cedo"),
+            (eq_d_duracao, "#be185d", "duração curta"),
+        ]:
+            idx_min = d_list.index(min(d_list))
+            idx_max = d_list.index(max(d_list))
+            for idx, symbol, tag in [(idx_min, "circle", "mín"), (idx_max, "diamond", "máx")]:
+                fig_eq.add_trace(go.Scatter(
+                    x=[eq_dates[idx]], y=[d_list[idx]],
+                    mode="markers",
+                    marker=dict(color=c, size=8, symbol=symbol),
+                    showlegend=False,
+                    hovertemplate=f"{tag} {lbl}<br>{eq_dates[idx]}<br>{d_list[idx]:.3f}s<extra></extra>",
+                ))
+
+        fig_eq.add_vline(
+            x=str(eq_date),
+            line=dict(color=eq_color, width=1.5, dash="dash"),
+            annotation_text=f"{eq_label}<br>{eq_date.strftime('%d/%m')}",
+            annotation_position="top",
+            annotation_font=dict(color=eq_color, size=10),
+        )
+
+        fig_eq.update_layout(
+            xaxis_title="Data",
+            yaxis_title="Δ (segundos)",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+            hovermode="x unified",
+            margin=dict(t=70, b=40),
+            height=340,
+        )
+
+        with col:
+            st.plotly_chart(fig_eq, use_container_width=True)
+
     # ─── 4 seções de evento ───────────────────────────────────────────────────
 
     for label, event_date in events:
