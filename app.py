@@ -164,13 +164,16 @@ if city_info:
             delta_sunset   = time_to_td(sunset_time)  - time_to_td(min_sunset)
             delta_duration = r["duration"] - min_duration
 
-            is_selected = r["date"] == selected_date
+            is_selected       = r["date"] == selected_date
+            is_max_sunrise    = sunrise_time == max_sunrise
+            is_min_sunset     = sunset_time == min_sunset
+            is_min_duration   = r["duration"] == min_duration
 
             table.append({
                 "Data":               r["date"].strftime("%Y-%m-%d") + (" ◀" if is_selected else ""),
-                "Nascer do sol":      format_time(r["sunrise_dt"]),
-                "Pôr do sol":         format_time(r["sunset_dt"]),
-                "Duração":            format_duration(r["duration"]),
+                "Nascer do sol":      format_time(r["sunrise_dt"]) + (" ◀" if is_max_sunrise else ""),
+                "Pôr do sol":         format_time(r["sunset_dt"])  + (" ◀" if is_min_sunset else ""),
+                "Duração":            format_duration(r["duration"]) + (" ◀" if is_min_duration else ""),
                 "Δs nascer (tardio)": delta_seconds(delta_sunrise),
                 "Δs pôr (cedo)":      delta_seconds(delta_sunset),
                 "Δs duração (curto)": delta_seconds(delta_duration),
