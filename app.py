@@ -222,9 +222,9 @@ if city_info:
     )
     st.plotly_chart(fig_year, use_container_width=True)
 
-    # ─── Mini gráficos dos equinócios ────────────────────────────────────────
+    # ─── Mini gráficos dos solstícios ────────────────────────────────────────
 
-    equinoxes = [(lbl, d) for lbl, d in events if "Equinócio" in lbl]
+    equinoxes = [(lbl, d) for lbl, d in events if "Solstício" in lbl]
     eq_cols   = st.columns(2)
 
     for col, (eq_label, eq_date) in zip(eq_cols, equinoxes):
