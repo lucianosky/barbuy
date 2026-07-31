@@ -297,13 +297,55 @@ if city_info:
                 hovertemplate="%{x}<br>%{y:.3f}s<extra>Δ duração</extra>",
             ))
 
-            fig.add_vline(
-                x=str(event_date),
-                line=dict(color=color, width=1.5, dash="dash"),
-                annotation_text=event_date.strftime("%d/%m"),
-                annotation_position="top",
-                annotation_font=dict(color=color, size=10),
-            )
+            is_solstice = "Solstício" in label
+
+            if is_solstice:
+                minima_dates_set = set()
+                for d_list, c, lbl in [
+                    (d_nascer_list,  "#ca8a04", "nascer tardio"),
+                    (d_por_list,     "#c2410c", "pôr cedo"),
+                    (d_duracao_list, "#be185d", "duração curta"),
+                ]:
+                    idx_min = d_list.index(min(d_list))
+                    idx_max = d_list.index(max(d_list))
+                    fig.add_trace(go.Scatter(
+                        x=[event_dates_list[idx_min]], y=[d_list[idx_min]],
+                        mode="markers", marker=dict(color=c, size=9, symbol="circle"),
+                        showlegend=False,
+                        hovertemplate=f"mín {lbl}<br>%{{x}}<br>%{{y:.3f}}s<extra></extra>",
+                    ))
+                    fig.add_trace(go.Scatter(
+                        x=[event_dates_list[idx_max]], y=[d_list[idx_max]],
+                        mode="markers", marker=dict(color=c, size=9, symbol="diamond"),
+                        showlegend=False,
+                        hovertemplate=f"máx {lbl}<br>%{{x}}<br>%{{y:.3f}}s<extra></extra>",
+                    ))
+                    minima_dates_set.add(event_dates_list[idx_min])
+
+                for md in sorted(minima_dates_set):
+                    fig.add_vline(
+                        x=str(md),
+                        line=dict(color="#94a3b8", width=1, dash="dot"),
+                        annotation_text=md.strftime("%d/%m"),
+                        annotation_position="top",
+                        annotation_font=dict(color="#94a3b8", size=9),
+                    )
+                if event_date not in minima_dates_set:
+                    fig.add_vline(
+                        x=str(event_date),
+                        line=dict(color=color, width=1.5, dash="dash"),
+                        annotation_text=event_date.strftime("%d/%m"),
+                        annotation_position="top",
+                        annotation_font=dict(color=color, size=10),
+                    )
+            else:
+                fig.add_vline(
+                    x=str(event_date),
+                    line=dict(color=color, width=1.5, dash="dash"),
+                    annotation_text=event_date.strftime("%d/%m"),
+                    annotation_position="top",
+                    annotation_font=dict(color=color, size=10),
+                )
 
             fig.update_layout(
                 xaxis_title="Data",
