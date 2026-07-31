@@ -140,7 +140,7 @@ if city_info:
     # ─── Gráfico anual ────────────────────────────────────────────────────────
 
     st.divider()
-    st.subheader(f"Duração do dia — {city_input} · {year}")
+    st.subheader(f"Curvas dos deltas — {city_input} · {year}")
 
     with st.spinner("Calculando ano completo..."):
         year_rows = calculate_solar_rows(
@@ -148,46 +148,75 @@ if city_info:
             date(year, 1, 1), date(year, 12, 31),
         )
 
-    year_dates    = [r["date"]     for r in year_rows]
-    year_duration = [r["duration"].total_seconds() / 3600 for r in year_rows]
+    yr_dates = [r["date"] for r in year_rows]
+
+    yr_max_sunrise  = max(r["sunrise_dt"].replace(tzinfo=None).time() for r in year_rows)
+    yr_min_sunset   = min(r["sunset_dt"].replace(tzinfo=None).time() for r in year_rows)
+    yr_min_duration = min(r["duration"] for r in year_rows)
+
+    yr_d_nascer  = []
+    yr_d_por     = []
+    yr_d_duracao = []
+    for r in year_rows:
+        sunrise_time = r["sunrise_dt"].replace(tzinfo=None).time()
+        sunset_time  = r["sunset_dt"].replace(tzinfo=None).time()
+        yr_d_nascer.append((time_to_td(yr_max_sunrise) - time_to_td(sunrise_time)).total_seconds())
+        yr_d_por.append((time_to_td(sunset_time) - time_to_td(yr_min_sunset)).total_seconds())
+        yr_d_duracao.append((r["duration"] - yr_min_duration).total_seconds())
 
     fig_year = go.Figure()
     fig_year.add_trace(go.Scatter(
-        x=year_dates, y=year_duration,
-        name="Duração do dia",
-        line=dict(color="#60a5fa", width=2.5),
-        hovertemplate="%{x}<br>%{y:.4f}h<extra>Duração</extra>",
+        x=yr_dates, y=yr_d_nascer, name="Δ nascer tardio",
+        line=dict(color="#ca8a04", width=2),
+        hovertemplate="%{x}<br>%{y:.3f}s<extra>Δ nascer</extra>",
+    ))
+    fig_year.add_trace(go.Scatter(
+        x=yr_dates, y=yr_d_por, name="Δ pôr cedo",
+        line=dict(color="#c2410c", width=2),
+        hovertemplate="%{x}<br>%{y:.3f}s<extra>Δ pôr</extra>",
+    ))
+    fig_year.add_trace(go.Scatter(
+        x=yr_dates, y=yr_d_duracao, name="Δ duração curto",
+        line=dict(color="#be185d", width=2),
+        hovertemplate="%{x}<br>%{y:.3f}s<extra>Δ duração</extra>",
     ))
 
-    annotation_positions = ["top left", "top right", "top left", "top right"]
-    for (label, d), ann_pos in zip(events, annotation_positions):
-        color     = EVENT_COLORS.get(label, "#ffffff")
-        event_row = next((r for r in year_rows if r["date"] == d), None)
-        y_val     = event_row["duration"].total_seconds() / 3600 if event_row else None
+    # marcadores de mínimo (próximos ao solstício de inverno)
+    for d_list, c, lbl in [
+        (yr_d_nascer,  "#ca8a04", "nascer tardio"),
+        (yr_d_por,     "#c2410c", "pôr cedo"),
+        (yr_d_duracao, "#be185d", "duração curta"),
+    ]:
+        idx_min = d_list.index(min(d_list))
+        idx_max = d_list.index(max(d_list))
+        for idx, symbol, tag in [(idx_min, "circle", "mín"), (idx_max, "diamond", "máx")]:
+            fig_year.add_trace(go.Scatter(
+                x=[yr_dates[idx]], y=[d_list[idx]],
+                mode="markers",
+                marker=dict(color=c, size=9, symbol=symbol),
+                showlegend=False,
+                hovertemplate=f"{tag} {lbl}<br>{yr_dates[idx]}<br>{d_list[idx]:.3f}s<extra></extra>",
+            ))
 
+    # vlines dos 4 eventos (solstícios + equinócios)
+    ann_positions = ["top left", "top right", "top left", "top right"]
+    for (ev_label, d), ann_pos in zip(events, ann_positions):
+        ev_color = EVENT_COLORS.get(ev_label, "#ffffff")
         fig_year.add_vline(
             x=str(d),
-            line=dict(color=color, width=1.5, dash="dot"),
-            annotation_text=f"{label}<br>{d.strftime('%d/%m')}",
+            line=dict(color=ev_color, width=1.5, dash="dot"),
+            annotation_text=f"{ev_label}<br>{d.strftime('%d/%m')}",
             annotation_position=ann_pos,
-            annotation_font=dict(color=color, size=10),
+            annotation_font=dict(color=ev_color, size=10),
         )
-        if y_val is not None:
-            fig_year.add_trace(go.Scatter(
-                x=[d], y=[y_val],
-                mode="markers",
-                marker=dict(color=color, size=9, symbol="circle"),
-                name=label,
-                hovertemplate=f"{label}<br>{d.strftime('%d/%m/%Y')}<br>{y_val:.4f}h<extra></extra>",
-            ))
 
     fig_year.update_layout(
         xaxis_title="Data",
-        yaxis_title="Duração (horas)",
+        yaxis_title="Δ (segundos)",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
         hovermode="x unified",
         margin=dict(t=90, b=40),
-        height=400,
+        height=420,
     )
     st.plotly_chart(fig_year, use_container_width=True)
 
@@ -270,92 +299,8 @@ if city_info:
             return styles
 
         table_height = len(df) * 35 + 38
-
-        col_table, col_chart = st.columns([3, 2])
-
-        with col_table:
-            styled = df.style.apply(highlight, axis=None)
-            st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
-
-        with col_chart:
-            event_dates_list = [r["date"] for r in rows]
-
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=event_dates_list, y=d_nascer_list, name="Δ nascer tardio",
-                line=dict(color="#ca8a04", width=2),
-                hovertemplate="%{x}<br>%{y:.3f}s<extra>Δ nascer</extra>",
-            ))
-            fig.add_trace(go.Scatter(
-                x=event_dates_list, y=d_por_list, name="Δ pôr cedo",
-                line=dict(color="#c2410c", width=2),
-                hovertemplate="%{x}<br>%{y:.3f}s<extra>Δ pôr</extra>",
-            ))
-            fig.add_trace(go.Scatter(
-                x=event_dates_list, y=d_duracao_list, name="Δ duração curto",
-                line=dict(color="#be185d", width=2),
-                hovertemplate="%{x}<br>%{y:.3f}s<extra>Δ duração</extra>",
-            ))
-
-            is_solstice = "Solstício" in label
-
-            if is_solstice:
-                minima_dates_set = set()
-                for d_list, c, lbl in [
-                    (d_nascer_list,  "#ca8a04", "nascer tardio"),
-                    (d_por_list,     "#c2410c", "pôr cedo"),
-                    (d_duracao_list, "#be185d", "duração curta"),
-                ]:
-                    idx_min = d_list.index(min(d_list))
-                    idx_max = d_list.index(max(d_list))
-                    fig.add_trace(go.Scatter(
-                        x=[event_dates_list[idx_min]], y=[d_list[idx_min]],
-                        mode="markers", marker=dict(color=c, size=9, symbol="circle"),
-                        showlegend=False,
-                        hovertemplate=f"mín {lbl}<br>%{{x}}<br>%{{y:.3f}}s<extra></extra>",
-                    ))
-                    fig.add_trace(go.Scatter(
-                        x=[event_dates_list[idx_max]], y=[d_list[idx_max]],
-                        mode="markers", marker=dict(color=c, size=9, symbol="diamond"),
-                        showlegend=False,
-                        hovertemplate=f"máx {lbl}<br>%{{x}}<br>%{{y:.3f}}s<extra></extra>",
-                    ))
-                    minima_dates_set.add(event_dates_list[idx_min])
-
-                for md in sorted(minima_dates_set):
-                    fig.add_vline(
-                        x=str(md),
-                        line=dict(color="#94a3b8", width=1, dash="dot"),
-                        annotation_text=md.strftime("%d/%m"),
-                        annotation_position="top",
-                        annotation_font=dict(color="#94a3b8", size=9),
-                    )
-                if event_date not in minima_dates_set:
-                    fig.add_vline(
-                        x=str(event_date),
-                        line=dict(color=color, width=1.5, dash="dash"),
-                        annotation_text=event_date.strftime("%d/%m"),
-                        annotation_position="top",
-                        annotation_font=dict(color=color, size=10),
-                    )
-            else:
-                fig.add_vline(
-                    x=str(event_date),
-                    line=dict(color=color, width=1.5, dash="dash"),
-                    annotation_text=event_date.strftime("%d/%m"),
-                    annotation_position="top",
-                    annotation_font=dict(color=color, size=10),
-                )
-
-            fig.update_layout(
-                xaxis_title="Data",
-                yaxis_title="Δ (segundos)",
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-                hovermode="x unified",
-                margin=dict(t=60, b=40),
-                height=table_height,
-            )
-            st.plotly_chart(fig, use_container_width=True)
+        styled = df.style.apply(highlight, axis=None)
+        st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
 
 st.divider()
 st.caption("Barbuy · homenagem à astrônoma brasileira Beatriz Barbuy (IAG/USP) · cálculos via [astral](https://sffjunkie.github.io/astral/)")
