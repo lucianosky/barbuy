@@ -105,8 +105,9 @@ city_info = None
 tz_name   = "UTC"
 
 if city_input:
-    with st.spinner("Buscando localização..."):
-        location = geocode_city(city_input)
+    with col_left:
+        with st.spinner("Buscando localização..."):
+            location = geocode_city(city_input)
 
     if location:
         try:
@@ -135,10 +136,11 @@ if city_info:
 
     with col_right:
         st.markdown(f"**{location.address}**")
-        st.caption(tz_name)
-        c1, c2 = st.columns(2)
-        c1.metric("Latitude",  f"{location.latitude:.6f}°")
-        c2.metric("Longitude", f"{location.longitude:.6f}°")
+        st.caption(
+            f"Latitude **{location.latitude:.6f}°** · "
+            f"Longitude **{location.longitude:.6f}°** · "
+            f"{tz_name}"
+        )
 
         st.markdown("")
         TWELVE = timedelta(hours=12)
