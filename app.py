@@ -22,8 +22,8 @@ def geocode_city(city_name: str):
 
 
 def format_time(dt) -> str:
-    centisecond = dt.microsecond // 10000
-    return dt.strftime("%H:%M:%S") + f".{centisecond:02d}"
+    ms = dt.microsecond // 1000
+    return dt.strftime("%H:%M:%S") + f".{ms:03d}"
 
 
 def format_duration(delta) -> str:
@@ -31,12 +31,12 @@ def format_duration(delta) -> str:
     h = int(total) // 3600
     m = (int(total) % 3600) // 60
     s = int(total) % 60
-    cs = int((total - int(total)) * 100)
-    return f"{h:02d}:{m:02d}:{s:02d}.{cs:02d}"
+    ms = int((total - int(total)) * 1000)
+    return f"{h:02d}:{m:02d}:{s:02d}.{ms:03d}"
 
 
-def delta_seconds(td) -> float:
-    return round(td.total_seconds(), 2)
+def format_delta(td) -> str:
+    return f"{td.total_seconds():.3f}"
 
 
 def time_to_td(t):
@@ -169,19 +169,19 @@ if city_info:
 
             flags.append({
                 "is_selected":     r["date"] == selected_date,
-                "is_max_sunrise":  delta_seconds(delta_sunrise) < 0.05,
-                "is_min_sunset":   delta_seconds(delta_sunset) < 0.05,
-                "is_min_duration": delta_seconds(delta_duration) < 0.05,
+                "is_max_sunrise":  delta_sunrise.total_seconds() < 0.005,
+                "is_min_sunset":   delta_sunset.total_seconds() < 0.005,
+                "is_min_duration": delta_duration.total_seconds() < 0.005,
             })
 
             table.append({
-                "Data":               r["date"].strftime("%Y-%m-%d"),
-                "Nascer do sol":      format_time(r["sunrise_dt"]),
-                "Pôr do sol":         format_time(r["sunset_dt"]),
-                "Duração":            format_duration(r["duration"]),
-                "Δs nascer (tardio)": delta_seconds(delta_sunrise),
-                "Δs pôr (cedo)":      delta_seconds(delta_sunset),
-                "Δs duração (curto)": delta_seconds(delta_duration),
+                "Data":                r["date"].strftime("%Y-%m-%d"),
+                "Nascer do sol":       format_time(r["sunrise_dt"]),
+                "Pôr do sol":          format_time(r["sunset_dt"]),
+                "Duração":             format_duration(r["duration"]),
+                "Δ nascer tardio (s)": format_delta(delta_sunrise),
+                "Δ pôr cedo (s)":      format_delta(delta_sunset),
+                "Δ duração curto (s)": format_delta(delta_duration),
             })
 
         df = pd.DataFrame(table)
@@ -198,14 +198,14 @@ if city_info:
                 if f["is_selected"]:
                     styles.at[i, "Data"] = C_DATE
                 if f["is_max_sunrise"]:
-                    styles.at[i, "Nascer do sol"]      = C_SUNRISE
-                    styles.at[i, "Δs nascer (tardio)"] = C_SUNRISE
+                    styles.at[i, "Nascer do sol"]       = C_SUNRISE
+                    styles.at[i, "Δ nascer tardio (s)"] = C_SUNRISE
                 if f["is_min_sunset"]:
-                    styles.at[i, "Pôr do sol"]   = C_SUNSET
-                    styles.at[i, "Δs pôr (cedo)"] = C_SUNSET
+                    styles.at[i, "Pôr do sol"]     = C_SUNSET
+                    styles.at[i, "Δ pôr cedo (s)"] = C_SUNSET
                 if f["is_min_duration"]:
-                    styles.at[i, "Duração"]            = C_DUR
-                    styles.at[i, "Δs duração (curto)"] = C_DUR
+                    styles.at[i, "Duração"]             = C_DUR
+                    styles.at[i, "Δ duração curto (s)"] = C_DUR
             return styles
 
         styled = df.style.apply(highlight, axis=None)
@@ -222,7 +222,7 @@ if city_info:
 
         st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
 
-        st.caption("Δs = diferença em segundos em relação ao extremo do período. Horários no fuso da cidade selecionada.")
+        st.caption("Δ (s) = diferença em segundos (precisão de milissegundo) em relação ao extremo do período. Horários no fuso da cidade selecionada.")
 
 st.divider()
 st.caption("Barbuy · homenagem à astrônoma brasileira Beatriz Barbuy (IAG/USP) · cálculos via [astral](https://sffjunkie.github.io/astral/)")
