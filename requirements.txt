@@ -3,3 +3,4 @@ astral
 geopy
 timezonefinder
 pandas
+plotly

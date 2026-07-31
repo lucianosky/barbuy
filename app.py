@@ -5,6 +5,7 @@ from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 from astral import LocationInfo
 from astral.sun import sun
 import pandas as pd
+import plotly.graph_objects as go
 
 st.set_page_config(page_title="Barbuy — Calculadora Solar", page_icon="☀️", layout="wide")
 
@@ -147,6 +148,9 @@ if city_info:
                     "sunrise_dt": sunrise_dt,
                     "sunset_dt":  sunset_dt,
                     "duration":   duration,
+                    "d_nascer":   None,
+                    "d_por":      None,
+                    "d_duracao":  None,
                 })
             except Exception:
                 pass
@@ -166,6 +170,10 @@ if city_info:
             delta_sunrise  = time_to_td(max_sunrise) - time_to_td(sunrise_time)
             delta_sunset   = time_to_td(sunset_time)  - time_to_td(min_sunset)
             delta_duration = r["duration"] - min_duration
+
+            r["d_nascer"]  = delta_sunrise.total_seconds()
+            r["d_por"]     = delta_sunset.total_seconds()
+            r["d_duracao"] = delta_duration.total_seconds()
 
             flags.append({
                 "is_selected":     r["date"] == selected_date,
@@ -223,6 +231,80 @@ if city_info:
         st.dataframe(styled, use_container_width=True, hide_index=True, height=table_height)
 
         st.caption("Δ (s) = diferença em segundos (precisão de milissegundo) em relação ao extremo do período. Horários no fuso da cidade selecionada.")
+
+        # --- Gráfico ---
+        st.divider()
+        st.subheader("Curvas dos deltas")
+
+        dates      = [r["date"] for r in rows]
+        d_nascer   = [r["d_nascer"]   for r in rows]
+        d_por      = [r["d_por"]      for r in rows]
+        d_duracao  = [r["d_duracao"]  for r in rows]
+
+        idx_nascer  = d_nascer.index(min(d_nascer))
+        idx_por     = d_por.index(min(d_por))
+        idx_duracao = d_duracao.index(min(d_duracao))
+
+        fig = go.Figure()
+
+        # curvas
+        fig.add_trace(go.Scatter(
+            x=dates, y=d_nascer, name="Δ nascer tardio",
+            line=dict(color="#ca8a04", width=2),
+            hovertemplate="%{x}<br>%{y:.3f}s<extra>Δ nascer</extra>",
+        ))
+        fig.add_trace(go.Scatter(
+            x=dates, y=d_por, name="Δ pôr cedo",
+            line=dict(color="#c2410c", width=2),
+            hovertemplate="%{x}<br>%{y:.3f}s<extra>Δ pôr</extra>",
+        ))
+        fig.add_trace(go.Scatter(
+            x=dates, y=d_duracao, name="Δ duração curto",
+            line=dict(color="#be185d", width=2),
+            hovertemplate="%{x}<br>%{y:.3f}s<extra>Δ duração</extra>",
+        ))
+
+        # pontos de mínimo
+        for idx, d_list, color, label in [
+            (idx_nascer,  d_nascer,  "#ca8a04", "nascer tardio"),
+            (idx_por,     d_por,     "#c2410c", "pôr cedo"),
+            (idx_duracao, d_duracao, "#be185d", "duração curta"),
+        ]:
+            fig.add_trace(go.Scatter(
+                x=[dates[idx]], y=[d_list[idx]],
+                mode="markers",
+                marker=dict(color=color, size=10, symbol="circle"),
+                name=f"mín {label}",
+                hovertemplate=f"{dates[idx]}<br>{d_list[idx]:.3f}s<extra>mín {label}</extra>",
+                showlegend=False,
+            ))
+            fig.add_vline(
+                x=str(dates[idx]),
+                line=dict(color=color, width=1, dash="dot"),
+                annotation_text=dates[idx].strftime("%d/%m"),
+                annotation_position="top",
+                annotation_font=dict(color=color, size=11),
+            )
+
+        # data selecionada
+        fig.add_vline(
+            x=str(selected_date),
+            line=dict(color="#93c5fd", width=1.5, dash="dash"),
+            annotation_text=selected_date.strftime("%d/%m"),
+            annotation_position="top right",
+            annotation_font=dict(color="#93c5fd", size=11),
+        )
+
+        fig.update_layout(
+            xaxis_title="Data",
+            yaxis_title="Δ (segundos)",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+            hovermode="x unified",
+            margin=dict(t=60, b=40),
+            height=420,
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
 st.caption("Barbuy · homenagem à astrônoma brasileira Beatriz Barbuy (IAG/USP) · cálculos via [astral](https://sffjunkie.github.io/astral/)")
