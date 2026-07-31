@@ -286,14 +286,16 @@ if city_info:
                 annotation_font=dict(color=color, size=11),
             )
 
-        # data selecionada
-        fig.add_vline(
-            x=str(selected_date),
-            line=dict(color="#93c5fd", width=1.5, dash="dash"),
-            annotation_text=selected_date.strftime("%d/%m"),
-            annotation_position="top right",
-            annotation_font=dict(color="#93c5fd", size=11),
-        )
+        # data selecionada — só desenha se não coincidir com nenhum mínimo
+        minima_dates = {dates[idx_nascer], dates[idx_por], dates[idx_duracao]}
+        if selected_date not in minima_dates:
+            fig.add_vline(
+                x=str(selected_date),
+                line=dict(color="#93c5fd", width=1.5, dash="dash"),
+                annotation_text=selected_date.strftime("%d/%m"),
+                annotation_position="top right",
+                annotation_font=dict(color="#93c5fd", size=11),
+            )
 
         fig.update_layout(
             xaxis_title="Data",
