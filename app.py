@@ -9,9 +9,6 @@ import plotly.graph_objects as go
 
 st.set_page_config(page_title="Barbuy — Calculadora Solar", page_icon="☀️", layout="wide")
 
-st.title("☀️ Barbuy — Calculadora Solar")
-st.caption("Precisão de segundos para nascer do sol, pôr do sol e duração do dia.")
-
 
 @st.cache_data(show_spinner=False)
 def geocode_city(city_name: str):
@@ -94,9 +91,14 @@ C_ABOVE12H = CELL.format("#bbf7d0")  # verde pastel — duração imediatamente 
 C_BELOW12H = CELL.format("#ddd6fe")  # lavanda pastel — duração imediatamente abaixo de 12h
 
 
-# ─── Input: cidade ────────────────────────────────────────────────────────────
+# ─── Cabeçalho — duas colunas ─────────────────────────────────────────────────
 
-city_input = st.text_input("Cidade", placeholder="Ex: Porto Alegre, Buenos Aires, Lisboa...")
+col_left, col_right = st.columns(2)
+
+with col_left:
+    st.title("☀️ Barbuy — Calculadora Solar")
+    st.caption("Precisão de segundos para nascer do sol, pôr do sol e duração do dia.")
+    city_input = st.text_input("Cidade", placeholder="Ex: Porto Alegre, Buenos Aires, Lisboa...")
 
 location = None
 city_info = None
@@ -107,11 +109,6 @@ if city_input:
         location = geocode_city(city_input)
 
     if location:
-        st.success(f"**{location.address}**")
-        col_lat, col_lon = st.columns(2)
-        col_lat.metric("Latitude",  f"{location.latitude:.6f}°")
-        col_lon.metric("Longitude", f"{location.longitude:.6f}°")
-
         try:
             from timezonefinder import TimezoneFinder
             tz_name = TimezoneFinder().timezone_at(lat=location.latitude, lng=location.longitude) or "UTC"
@@ -125,19 +122,69 @@ if city_input:
             longitude=location.longitude,
         )
     else:
-        st.error("Cidade não encontrada. Tente um nome diferente.")
-
+        with col_left:
+            st.error("Cidade não encontrada. Tente um nome diferente.")
 
 if city_info:
-    st.divider()
-
     hemisphere = "sul" if location.latitude < 0 else "norte"
     year       = date.today().year
     events     = solar_events(year, hemisphere)
 
-    col_window, _ = st.columns([1, 3])
-    with col_window:
+    with col_left:
         window = st.selectbox("Janela ao redor de cada evento (dias)", [10, 20, 30], index=1)
+
+    with col_right:
+        st.markdown(f"**{location.address}**")
+        st.caption(tz_name)
+        c1, c2 = st.columns(2)
+        c1.metric("Latitude",  f"{location.latitude:.6f}°")
+        c2.metric("Longitude", f"{location.longitude:.6f}°")
+
+        st.markdown("")
+        TWELVE = timedelta(hours=12)
+
+        for ev_label, ev_date in events:
+            ev_rows = calculate_solar_rows(
+                location.latitude, location.longitude, tz_name,
+                ev_date - timedelta(days=15), ev_date + timedelta(days=15),
+            )
+            if not ev_rows:
+                continue
+
+            st.markdown(f"**{ev_label}** — {ev_date.strftime('%d/%m/%Y')}")
+
+            if "Solstício" in ev_label:
+                is_inv = "Inverno" in ev_label
+                if is_inv:
+                    sr_row  = max(ev_rows, key=lambda r: r["sunrise_dt"].replace(tzinfo=None).time())
+                    ss_row  = min(ev_rows, key=lambda r: r["sunset_dt"].replace(tzinfo=None).time())
+                    dur_row = min(ev_rows, key=lambda r: r["duration"])
+                    st.caption(
+                        f"Dia mais curto: **{dur_row['date'].strftime('%d/%m')}** · "
+                        f"Nascer mais tardio: **{sr_row['date'].strftime('%d/%m')}** · "
+                        f"Pôr mais cedo: **{ss_row['date'].strftime('%d/%m')}**"
+                    )
+                else:
+                    sr_row  = min(ev_rows, key=lambda r: r["sunrise_dt"].replace(tzinfo=None).time())
+                    ss_row  = max(ev_rows, key=lambda r: r["sunset_dt"].replace(tzinfo=None).time())
+                    dur_row = max(ev_rows, key=lambda r: r["duration"])
+                    st.caption(
+                        f"Dia mais longo: **{dur_row['date'].strftime('%d/%m')}** · "
+                        f"Nascer mais cedo: **{sr_row['date'].strftime('%d/%m')}** · "
+                        f"Pôr mais tardio: **{ss_row['date'].strftime('%d/%m')}**"
+                    )
+            else:
+                above = min(
+                    (r for r in ev_rows if r["duration"] >= TWELVE),
+                    key=lambda r: r["duration"] - TWELVE, default=None,
+                )
+                below = min(
+                    (r for r in ev_rows if r["duration"] < TWELVE),
+                    key=lambda r: TWELVE - r["duration"], default=None,
+                )
+                above_str = above["date"].strftime("%d/%m") if above else "—"
+                below_str = below["date"].strftime("%d/%m") if below else "—"
+                st.caption(f"Duração acima de 12h: **{above_str}** · abaixo de 12h: **{below_str}**")
 
     # ─── Gráfico anual ────────────────────────────────────────────────────────
 
