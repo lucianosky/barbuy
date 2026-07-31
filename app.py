@@ -166,10 +166,10 @@ if city_info:
             delta_duration = r["duration"] - min_duration
 
             flags.append({
-                "is_selected":    r["date"] == selected_date,
-                "is_max_sunrise": sunrise_time == max_sunrise,
-                "is_min_sunset":  sunset_time == min_sunset,
-                "is_min_duration": r["duration"] == min_duration,
+                "is_selected":     r["date"] == selected_date,
+                "is_max_sunrise":  delta_seconds(delta_sunrise) == 0,
+                "is_min_sunset":   delta_seconds(delta_sunset) == 0,
+                "is_min_duration": delta_seconds(delta_duration) == 0,
             })
 
             table.append({
