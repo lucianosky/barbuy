@@ -1,5 +1,15 @@
 # Barbuy — Claude Code CLI
 
+## 1. Brew — leia primeiro
+
+→ `/Users/sky/Documents/Sky/brew/.agent/knowledge/brew-constitution.md`
+
+Skills: `/Users/sky/Documents/Sky/brew/.agent/skills/`
+
+Não aplicar arquitetura Brew a este projeto — é Python, não iOS.
+
+---
+
 ## Contexto do projeto
 
 **Barbuy** é uma calculadora solar de precisão nomeada em homenagem à astrônoma brasileira **Beatriz Barbuy** (IAG/USP).
