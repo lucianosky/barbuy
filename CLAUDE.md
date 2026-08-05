@@ -1,10 +1,9 @@
 # Barbuy — Claude Code CLI
 
-## 1. Brew — leia primeiro
+## Skills e protocolo
 
-→ `/Users/sky/Documents/Sky/brew/.agent/knowledge/brew-constitution.md`
-
-Skills: `/Users/sky/Documents/Sky/brew/.agent/skills/`
+Skills, sub-agents e protocolo de colaboração estão no Portafilter:
+`/Users/sky/Documents/Sky/portafilter/`
 
 Não aplicar arquitetura Brew a este projeto — é Python, não iOS.
 
