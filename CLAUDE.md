@@ -47,7 +47,7 @@ Preservado no repo como referência. **Não alterar.**
 
 1. Usuário digita nome da cidade (português, livre)
 2. geopy/Nominatim faz geocoding → lat/lon + fuso horário via timezonefinder
-3. Usuário escolhe janela: 10 / 20 / 30 dias ao redor de cada evento
+3. Usuário escolhe janela: 10 / 20 / 30 / 45 dias ao redor de cada evento (padrão 45 → 91 dias por estação, quase o ano todo)
 4. astral calcula para cada dia:
    - Sunrise (nascer do sol) — precisão de milissegundos
    - Sunset (pôr do sol) — precisão de milissegundos
@@ -66,7 +66,7 @@ Preservado no repo como referência. **Não alterar.**
 **Coluna esquerda:**
 - Título e descrição
 - Input de cidade
-- Seletor de janela (10/20/30 dias)
+- Seletor de janela (10/20/30/45 dias, padrão 45)
 
 **Coluna direita** (aparece após geocoding):
 - Nome completo da cidade, lat/lon, fuso horário
