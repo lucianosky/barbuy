@@ -132,7 +132,7 @@ if city_info:
     events     = solar_events(year, hemisphere)
 
     with col_left:
-        window = st.selectbox("Janela ao redor de cada evento (dias)", [10, 20, 30], index=1)
+        window = st.selectbox("Janela ao redor de cada evento (dias)", [10, 20, 30, 45], index=3)
 
     with col_right:
         st.markdown(f"**{location.address}**")
